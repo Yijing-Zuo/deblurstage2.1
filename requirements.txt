@@ -1,0 +1,9 @@
+# Install paddlepaddle-gpu==3.2.0 separately from the official cu126 index.
+paddlex[ocr-core]==3.7.0
+numpy==1.26.4
+Pillow==11.3.0
+opencv-contrib-python==4.10.0.84
+huggingface-hub==0.35.3
+PyYAML==6.0.2
+symspellpy==6.9.0
+reportlab==4.4.9

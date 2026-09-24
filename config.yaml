@@ -1,0 +1,51 @@
+# All relative paths are resolved from this config file, never the terminal cwd.
+samples: ../deblur-assets/data/docsity/samples.jsonl
+references: ../deblur-assets/data/docsity_references/clear.jsonl
+model_cache: ../deblur-assets/model-cache
+run_dir: ../deblur-assets/runs/stage2_1/formal
+expected_samples: 157
+device: gpu:0
+models:
+  - name: PP-OCRv6_medium_det
+    repo: PaddlePaddle/PP-OCRv6_medium_det
+    revision: 8e0f56fb2ef86b461d99cfc7ac5c137738985f61
+  - name: PP-OCRv6_medium_rec
+    repo: PaddlePaddle/PP-OCRv6_medium_rec
+    revision: e5a92bcbc5cc1b494628e458d267778f0704fd7c
+  - name: en_PP-OCRv5_mobile_rec
+    repo: PaddlePaddle/en_PP-OCRv5_mobile_rec
+    revision: 267c36e24c331595590fe7bd72bde2436fd286f2
+detection:
+  limit_side_len: 1536
+  limit_type: min
+  thresh: 0.2
+  box_thresh: 0.4
+  unclip_ratio: 1.5
+layout:
+  max_residual_regions: 8
+rescue:
+  short_chars: 5
+  long_extent_ratio: 12
+  length_ratio: 0.35
+  tight_padding: 1
+  max_segments: 3
+  overlap: 0.15
+decode:
+  mode: conservative
+  beam_width: 8
+  beam_top_k: 3
+  max_candidates: 12
+  phrase_words: 3
+  phrase_beam: 16
+  lexicon_max_edit: 2
+  visual_tolerance: 0.35
+  model_veto: 0.7
+  prior_weight: 0.06
+  min_gain: 0.01
+  min_overlap_letters: 4
+  min_model_support: 2
+render:
+  page_size: [512, 768]
+  font_size: 10.5
+  line_height: 15
+  margin: 28

@@ -1,0 +1,21 @@
+# Inputs, models and runs belong in ../deblur-assets, never in Git.
+/data/
+/models/
+/model-cache/
+/hf-cache/
+/runs/
+/output/
+/tmp/
+*.npz
+*.pdparams
+*.pdiparams
+*.safetensors
+*.tar.gz
+*.zip
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+.env
+.ipynb_checkpoints/
+*.log
