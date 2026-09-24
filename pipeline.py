@@ -251,16 +251,26 @@ def check_pages(samples, pages):
 def run_decode(pages, config, run_dir):
     from decode import decode_line, make_lexicon
     settings = config["decode"]
+    started = time.monotonic()
+    total = sum(len(page["lines"]) for page in pages)
+    completed = 0
+    print(f"[decode] {len(pages)} pages, {total} lines; CPU candidate scoring. "
+          "Preparing dictionary...", flush=True)
     lexicon = make_lexicon(settings) if settings.get("mode") != "visual" else None
+    print(f"[decode] ready ({time.monotonic() - started:.1f}s); saved lines will be reused.", flush=True)
     stamp = code_stamp("decode.py", "ctc.py")
     result, validated = [], set()
     fields = ("ocr_text", "text", "needs_review", "changes", "candidates", "visual_sources")
-    for page in pages:
+    for page_number, page in enumerate(pages, 1):
         current = copy.deepcopy(page)
         for line in current["lines"]:
             source = {"observations": line["observations"], "box": line["box"]}
             key = fingerprint({**source, "settings": settings, "code": stamp})
             cache = Path(run_dir) / "cache" / "decoded" / f"{key}.json"
+            label = f"[decode {completed + 1}/{total}] {line['id']}"
+            line_started = time.monotonic()
+            print(f"{label}: {'checking saved result' if cache.is_file() else 'scoring candidates'}...", flush=True)
+            outcome = "done"
             try:
                 for observation in line["observations"]:
                     identity = (observation["key"], observation["npz_sha256"], observation["crop_sha256"])
@@ -269,6 +279,7 @@ def run_decode(pages, config, run_dir):
                         validated.add(identity)
                 if cache.is_file():
                     decoded = read_json(cache)
+                    outcome = "cached"
                 else:
                     decoded = decode_line(source, Path(run_dir), settings, lexicon)
                     decoded = {field: decoded[field] for field in fields if field in decoded}
@@ -277,17 +288,24 @@ def run_decode(pages, config, run_dir):
                 line.update({field: decoded[field] for field in fields if field in decoded})
                 line["needs_review"] = sorted(set(previous + line.get("needs_review", [])))
             except Exception as exc:
+                outcome = f"error ({type(exc).__name__}: {exc})"
                 available = [o["text"] for o in line["observations"] if o.get("text")]
                 fallback = available[0] if available else "[unreadable]"
                 line.update(ocr_text=fallback, text=fallback, status="error",
                             needs_review=["decode_failure"], error=f"{type(exc).__name__}: {exc}", changes=[])
                 current["status"] = "error"
+            completed += 1
+            print(f"{label}: {outcome} ({time.monotonic() - line_started:.1f}s)", flush=True)
         current["decode_stamp"] = stamp
         current["decode_settings"] = settings
         result.append(current)
         write_jsonl(Path(run_dir) / "pages.jsonl", result)
+        print(f"[decode page {page_number}/{len(pages)}] {page['id']}: saved; "
+              f"{completed}/{total} lines visited, {time.monotonic() - started:.1f}s elapsed.", flush=True)
+    print("[decode] writing combined line results...", flush=True)
     write_jsonl(Path(run_dir) / "lines.jsonl",
                 ({"sample_id": page["id"], **line} for page in result for line in page["lines"]))
+    print(f"[decode] finished in {time.monotonic() - started:.1f}s.", flush=True)
     return result
 
 
@@ -336,18 +354,22 @@ def main(argv=None):
         write_json(run / "config.snapshot.json", config)
         try:
             if args.stage in ("ocr", "all"):
+                print(f"[ocr] preparing models for {len(samples)} pages...", flush=True)
                 models = resolve_models(config["models"], config["model_cache"], args.offline)
                 backend = PaddleBackend(models, ALPHABET, config["device"], config["detection"])
                 pages = run_ocr(samples, config, run, models, backend)
                 state["models"] = models
             elif args.stage == "decode":
+                print("[decode] reading saved OCR evidence...", flush=True)
                 pages = read_jsonl(run / "ocr.jsonl")
             else:
                 pages = read_jsonl(run / "pages.jsonl")
+            print(f"[check] verifying {len(pages)} saved pages against Out inputs...", flush=True)
             check_pages(samples, pages)
             if args.stage in ("decode", "all"):
                 pages = run_decode(pages, config, run)
             if args.stage in ("render", "all"):
+                print("[render] creating OCR, recovered, comparison PDFs and review HTML...", flush=True)
                 from render import render_run
                 reference_path = config.get("references")
                 references = {}
@@ -357,6 +379,7 @@ def main(argv=None):
                     else:
                         print("Clear manifest unavailable; comparison will mark Clear as missing.", flush=True)
                 state["outputs"] = render_run(samples, pages, run, references, config.get("render"))
+                print("[render] files saved.", flush=True)
             errors = sum(p["status"] == "error" for p in pages)
             review = sum(bool(p.get("needs_review")) or any(l.get("needs_review") for l in p["lines"]) for p in pages)
             state.update(status="incomplete" if errors else "done", completed_pages=len(pages) - errors,

@@ -90,6 +90,18 @@ nohup env LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH
 
 日志在 `~/deblur-assets/runs/stage2_1/formal.log`。`nohup` 可以应对终端断开，但不能阻止服务器／容器被关闭；重新启动后可按下文恢复。
 
+OCR阶段使用GPU。随后候选解码使用CPU逐行计算，H200不会自动加速这一部分；长乱码行可能明显更慢。新日志会显示 `[decode 当前行/总行数]` 的开始、完成和单行耗时，再进入 `[render]`。`14_100: done` 只表示最后一个区域的OCR完成，不表示整个实验结束。
+
+早期版本在OCR结束后没有decode进度日志。正在运行该版本时，可在另一个Terminal只读查看：
+
+```bash
+ps -u "$USER" -o pid,etime,time,pcpu,stat,args | grep '[p]ython.*pipeline.py'
+find ~/deblur-assets/runs/stage2_1/formal/cache/decoded \
+  -maxdepth 1 -type f -name '*.json' -printf '%T@ %f\n' | sort -n | tail -3
+```
+
+隔30–60秒再查看，解码缓存修改时间继续前进说明有新行完成；CPU累计TIME增长说明进程仍在计算，但单凭这一点不能证明一定正常。单条慢行完成前不会产生新的解码缓存，旧版 `run.json` 也不会逐行刷新。如果需要更新进度日志，先在原终端按一次Ctrl+C并等提示符返回，再拉取更新、执行 `python -u pipeline.py decode && python -u pipeline.py render`；已有OCR和校验通过的解码缓存继续使用，无需重新下载权重。
+
 ## 查看结果
 
 JupyterLab 左侧进入 `deblur-assets/runs/stage2_1/formal/`：
